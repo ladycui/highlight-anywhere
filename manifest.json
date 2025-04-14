@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Highlight Anywhere",
+  "version": "1.0.0",
+  "description": "Highlight text on any webpage and save it locally",
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "public/icons/icon.png",
+      "32": "public/icons/icon.png",
+      "48": "public/icons/icon.png",
+      "128": "public/icons/icon.png"
+    }
+  },
+  "icons": {
+    "16": "public/icons/icon.png",
+    "32": "public/icons/icon.png",
+    "48": "public/icons/icon.png",
+    "128": "public/icons/icon.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "commands"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content.js"],
+      "css": ["src/content/content.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/utils/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "commands": {
+    "toggle-highlight-mode": {
+      "suggested_key": {
+        "default": "Shift+Ctrl+H"
+      },
+      "description": "Toggle highlight mode"
+    }
+  }
+} 

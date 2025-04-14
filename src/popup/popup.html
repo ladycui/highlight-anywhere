@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Highlight Anywhere</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Highlight Anywhere</h1>
+    </div>
+    
+    <div class="toggle-container">
+      <span>Highlight Mode</span>
+      <label class="toggle">
+        <input type="checkbox" id="highlightToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+    
+    <div class="shortcut-info">
+      <p>Shortcut: <span class="kbd">Shift</span> + <span class="kbd">Ctrl</span> + <span class="kbd">H</span></p>
+    </div>
+    
+    <div class="divider"></div>
+    
+    <div class="settings">
+      <h2>Settings</h2>
+      
+      <div class="setting-item">
+        <label for="storageLocation">Storage Location:</label>
+        <div class="input-with-button">
+          <input type="text" id="storageLocation" placeholder="Loading...">
+          <button id="browseButton" title="Browse">...</button>
+        </div>
+      </div>
+      
+      <div class="setting-item">
+        <label for="highlightColor">Highlight Color:</label>
+        <input type="color" id="highlightColor" value="#FFEE00">
+      </div>
+    </div>
+    
+    <div class="footer">
+      <button id="saveSettings">Save Settings</button>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html> 
