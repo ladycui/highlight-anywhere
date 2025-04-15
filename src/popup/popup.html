@@ -30,10 +30,23 @@
       <h2>Settings</h2>
       
       <div class="setting-item">
+        <div class="toggle-container">
+          <span>Store Highlights</span>
+          <label class="toggle">
+            <input type="checkbox" id="storeHighlightsToggle">
+            <span class="slider"></span>
+          </label>
+        </div>
+      </div>
+      
+      <div class="setting-item" id="storageLocationContainer">
         <label for="storageLocation">Storage Location:</label>
         <div class="input-with-button">
-          <input type="text" id="storageLocation" placeholder="Loading...">
+          <input type="text" id="storageLocation" placeholder="Set your storage location">
           <button id="browseButton" title="Browse">...</button>
+        </div>
+        <div class="setting-help">
+          Path will be created automatically when highlights are saved
         </div>
       </div>
       

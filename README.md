@@ -7,9 +7,16 @@ A Chrome extension that allows users to highlight text on any webpage and save t
 - Toggle highlighting mode on/off with keyboard shortcut (Shift+Ctrl+H)
 - Highlight text selections on any webpage
 - Automatic persistence of highlights
-- Configurable storage location
+- ~~Configurable storage location~~ data saved locally
 - Highlighted content is restored when revisiting webpages
 - Modern, clean Apple-inspired design
+
+### Bugs & TODO
+* configuration of storage location, not supported yet
+* toggle status is not stable right now
+* only text is supported, intead of all kinds of types
+* local storage needs to be refreshed regullaly.
+
 
 ## Architecture
 
@@ -84,4 +91,4 @@ MIT License
 
 ## Credits
 
-Developed by [Your Name] 
+Developed by ladycui

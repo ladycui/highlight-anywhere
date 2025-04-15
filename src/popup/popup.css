@@ -9,6 +9,7 @@
   --toggle-on-color: #34c759;
   --toggle-off-color: #d1d1d6;
   --shadow-color: rgba(0, 0, 0, 0.1);
+  --help-text-color: #8e8e93;
 }
 
 * {
@@ -135,7 +136,7 @@ input:checked + .slider:before {
 }
 
 .setting-item {
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .setting-item label {
@@ -143,6 +144,13 @@ input:checked + .slider:before {
   font-size: 13px;
   margin-bottom: 4px;
   color: #666;
+}
+
+.setting-help {
+  font-size: 11px;
+  color: var(--help-text-color);
+  margin-top: 4px;
+  font-style: italic;
 }
 
 .input-with-button {
@@ -199,6 +207,11 @@ button:hover {
   background-color: #0064d2;
 }
 
+button:disabled {
+  background-color: #85b7e7;
+  cursor: not-allowed;
+}
+
 #browseButton {
   padding: 8px 12px;
   flex-shrink: 0;
@@ -212,4 +225,25 @@ button:hover {
 
 #saveSettings {
   width: 100%;
+}
+
+/* Notification */
+.notification {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(52, 199, 89, 0.9);
+  color: white;
+  padding: 8px 12px;
+  font-size: 12px;
+  text-align: center;
+  transform: translateY(-100%);
+  transition: transform 0.3s ease;
+  z-index: 1000;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.notification.show {
+  transform: translateY(0);
 } 
