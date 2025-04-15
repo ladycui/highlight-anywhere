@@ -11,11 +11,9 @@ A Chrome extension that allows users to highlight text on any webpage and save t
 - Highlighted content is restored when revisiting webpages
 - Modern, clean Apple-inspired design
 
-### Bugs & TODO
+### Current bugs
 * configuration of storage location, not supported yet
 * toggle status is not stable right now
-* only text is supported, intead of all kinds of types
-* local storage needs to be refreshed regullaly.
 
 
 ## Architecture
@@ -28,14 +26,17 @@ The extension is built using Manifest V3 and has a modular architecture designed
 - **Utility Modules**: Provide extensible interfaces for future enhancements
 
 ### Future Extensions
-
+* only text is supported, intead of all kinds of types
 The architecture is designed to be extensible to support highlighting other elements beyond text, such as:
 
-- Images
-- Videos
-- Maps
-- Tables
-- And more...
+   - Images
+   - Videos
+   - Maps
+   - Tables
+   - And more...
+* local storage needs to be refreshed regullaly.
+* cancel a highlight
+
 
 ## Installation
 
@@ -91,4 +92,4 @@ MIT License
 
 ## Credits
 
-Developed by ladycui
+Developed by [@ladycui](https://github.com/ladycui), co-inspired by [@ser-void](https://github.com/ser-void)
