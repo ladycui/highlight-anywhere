@@ -7,32 +7,80 @@ class HighlightManager {
   constructor() {
     this.isEnabled = false;
     this.highlightedRanges = [];
-    this.storageKey = `highlight-data-${this.getNormalizedUrl()}`;
+    this.storage = new HighlightStorage();
+    this.normalizedUrl = this.getNormalizedUrl();
+    this.storageKey = `highlight-data-${this.normalizedUrl}`;
+    this.highlightsLoaded = false;
     console.log('[HighlightAnywhere] Initialized with storage key:', this.storageKey);
     
-    // 添加调试按钮 (开发模式)
+    // Add debug tools (development mode only)
     this.addDebugTools();
     
-    // 正常初始化
+    // First load the highlight mode state
+    this.loadHighlightModeState();
+    
+    // Normal initialization
     this.setupEventListeners();
     
-    // 延迟加载高亮，确保DOM已完全加载
+    // Delay loading highlights to ensure DOM is fully loaded
     if (document.readyState === 'complete') {
-      this.loadHighlights();
+      // Only load highlights if extension is enabled
+      if (this.isEnabled) {
+        this.loadHighlights();
+      } else {
+        console.log('[HighlightAnywhere] Extension disabled, skipping initial highlight loading');
+      }
     } else {
       window.addEventListener('load', () => {
-        console.log('[HighlightAnywhere] Window loaded, now loading highlights');
-        // 给DOM多一点时间稳定，特别是对于复杂页面
-        setTimeout(() => this.loadHighlights(), 500);
+        console.log('[HighlightAnywhere] Window loaded');
+        
+        // Give DOM a bit more time to stabilize, especially for complex pages
+        // Only load highlights if extension is enabled
+        setTimeout(() => {
+          if (this.isEnabled) {
+            console.log('[HighlightAnywhere] Now loading highlights');
+            this.loadHighlights();
+          } else {
+            console.log('[HighlightAnywhere] Extension disabled, skipping initial highlight loading');
+          }
+        }, 500);
       });
     }
   }
 
   /**
-   * 添加调试工具 (仅用于开发阶段)
+   * Load highlight mode state from storage
+   */
+  loadHighlightModeState() {
+    // First load from local storage
+    chrome.storage.local.get(['settings'], (result) => {
+      if (result.settings && result.settings.enabled !== undefined) {
+        this.isEnabled = result.settings.enabled;
+        console.log('[HighlightAnywhere] Loaded highlight mode state from storage:', this.isEnabled);
+        
+        // Immediately apply state to UI
+        if (this.isEnabled) {
+          document.body.classList.add('highlight-mode');
+        } else {
+          document.body.classList.remove('highlight-mode');
+        }
+      }
+      
+      // Then request current state from background to ensure sync
+      chrome.runtime.sendMessage({ action: 'getState' }, (response) => {
+        if (response && response.enabled !== undefined && response.enabled !== this.isEnabled) {
+          console.log('[HighlightAnywhere] Updating state from background:', response.enabled);
+          this.toggleHighlightMode(response.enabled);
+        }
+      });
+    });
+  }
+
+  /**
+   * Add debug tools (development phase only)
    */
   addDebugTools() {
-    // 检查是否已存在调试面板
+    // Check if debug panel already exists
     if (document.getElementById('highlight-debug-panel')) return;
     
     const debugPanel = document.createElement('div');
@@ -47,14 +95,26 @@ class HighlightManager {
     debugPanel.style.borderRadius = '5px';
     debugPanel.style.fontSize = '12px';
     debugPanel.style.fontFamily = 'monospace';
-    debugPanel.style.display = 'none'; // 默认隐藏
+    debugPanel.style.display = 'none'; // Default hidden
     
-    // 按钮容器
+    // URL info display
+    const urlInfo = document.createElement('div');
+    urlInfo.style.marginBottom = '8px';
+    urlInfo.style.fontSize = '11px';
+    urlInfo.style.wordBreak = 'break-all';
+    urlInfo.innerHTML = `
+      <div>Original URL: ${window.location.href}</div>
+      <div>Normalized URL: ${this.normalizedUrl}</div>
+      <div>Storage Key: ${this.storageKey}</div>
+    `;
+    debugPanel.appendChild(urlInfo);
+    
+    // Button container
     const buttonContainer = document.createElement('div');
     buttonContainer.style.display = 'flex';
     buttonContainer.style.gap = '5px';
     
-    // 按键 - 转储存储内容
+    // Button - Dump storage content
     const dumpStorageBtn = document.createElement('button');
     dumpStorageBtn.textContent = 'Dump Storage';
     dumpStorageBtn.onclick = () => {
@@ -65,7 +125,7 @@ class HighlightManager {
     };
     buttonContainer.appendChild(dumpStorageBtn);
     
-    // 按键 - 重新加载高亮
+    // Button - Reload highlights
     const reloadHighlightsBtn = document.createElement('button');
     reloadHighlightsBtn.textContent = 'Reload Highlights';
     reloadHighlightsBtn.onclick = () => {
@@ -74,7 +134,7 @@ class HighlightManager {
     };
     buttonContainer.appendChild(reloadHighlightsBtn);
     
-    // 按键 - 清除所有高亮
+    // Button - Clear all highlights
     const clearHighlightsBtn = document.createElement('button');
     clearHighlightsBtn.textContent = 'Clear Highlights';
     clearHighlightsBtn.onclick = () => {
@@ -83,7 +143,21 @@ class HighlightManager {
     };
     buttonContainer.appendChild(clearHighlightsBtn);
     
-    // 消息显示区域
+    // Button - Show URL info
+    const checkUrlBtn = document.createElement('button');
+    checkUrlBtn.textContent = 'Check URLs';
+    checkUrlBtn.onclick = () => {
+      // Look up keys in storage and show them
+      chrome.storage.local.get(['highlight-index'], (result) => {
+        const indexData = result['highlight-index'] || {};
+        console.log('[HighlightAnywhere] Stored URL keys:', Object.keys(indexData));
+        console.log('[HighlightAnywhere] Current normalized URL:', this.normalizedUrl);
+        this.showDebugMessage('URL info logged to console');
+      });
+    };
+    buttonContainer.appendChild(checkUrlBtn);
+    
+    // Message display area
     const messageArea = document.createElement('div');
     messageArea.id = 'highlight-debug-message';
     messageArea.style.marginTop = '5px';
@@ -94,7 +168,7 @@ class HighlightManager {
     
     document.body.appendChild(debugPanel);
     
-    // 添加快捷键切换调试面板
+    // Add shortcut to toggle debug panel
     document.addEventListener('keydown', (e) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'D') {
         debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
@@ -103,26 +177,30 @@ class HighlightManager {
   }
   
   /**
-   * 清除当前页面上的所有高亮
+   * Clear all highlights on the current page
    */
   clearAllHighlights() {
-    // 移除所有高亮元素
+    // Remove all highlighted elements
     document.querySelectorAll('.highlight-anywhere-highlight').forEach(el => {
       const textNode = document.createTextNode(el.textContent);
       el.parentNode.replaceChild(textNode, el);
     });
     
-    // 清空内存中的数据
+    // Clear memory data
     this.highlightedRanges = [];
     
-    // 从存储中删除
-    chrome.storage.local.remove(this.storageKey, () => {
-      console.log('[HighlightAnywhere] Cleared all highlights for this page');
-    });
+    // Delete from storage
+    this.storage.deleteHighlights(this.normalizedUrl)
+      .then(() => {
+        console.log('[HighlightAnywhere] Cleared all highlights for this page');
+      })
+      .catch(err => {
+        console.error('[HighlightAnywhere] Error clearing highlights:', err);
+      });
   }
   
   /**
-   * 显示调试消息
+   * Show debug message
    */
   showDebugMessage(message) {
     const messageArea = document.getElementById('highlight-debug-message');
@@ -143,14 +221,33 @@ class HighlightManager {
       console.log('[HighlightAnywhere] Received message:', message.action, message);
       
       if (message.action === 'toggleHighlight') {
-        this.toggleHighlightMode();
-        sendResponse({ status: 'success', isEnabled: this.isEnabled });
+        // If message contains enabled attribute, use it to force set state
+        const currentState = this.isEnabled;
+        const newState = message.enabled !== undefined ? 
+          this.toggleHighlightMode(message.enabled) : 
+          this.toggleHighlightMode();
+        
+        // Record state change and return state
+        console.log(`[HighlightAnywhere] State changed: ${currentState} -> ${newState}`);
+        sendResponse({ status: 'success', isEnabled: newState, previousState: currentState });
       } else if (message.action === 'updateSettings') {
         this.updateSettings(message.settings);
         sendResponse({ status: 'success' });
       } else if (message.action === 'showStorageNotification') {
         this.showStorageNotification();
         sendResponse({ status: 'success' });
+      } else if (message.action === 'loadHighlights') {
+        // Check if direct data was provided (used when storage is disabled)
+        if (message.directData) {
+          this.loadHighlights(message.force === true, message.directData);
+        } else {
+          this.loadHighlights(message.force === true);
+        }
+        sendResponse({ status: 'success' });
+      } else if (message.action === 'checkState') {
+        // New: Request to check and sync state
+        this.syncStateWithBackground();
+        sendResponse({ status: 'success', isEnabled: this.isEnabled });
       }
       
       return true; // Required for async response
@@ -165,6 +262,29 @@ class HighlightManager {
         this.highlightSelection(selection);
       }
     });
+      
+    // Listen for page visibility changes - Force sync state when page regains focus
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        console.log('[HighlightAnywhere] Page became visible, syncing state');
+        this.syncStateWithBackground();
+      }
+    });
+  }
+
+  /**
+   * Sync highlight state with background script
+   */
+  syncStateWithBackground() {
+    chrome.runtime.sendMessage({ action: 'getState' }, (response) => {
+      if (response && response.enabled !== undefined) {
+        // If state is inconsistent, force update to background state
+        if (this.isEnabled !== response.enabled) {
+          console.log('[HighlightAnywhere] State sync: local', this.isEnabled, 'background', response.enabled);
+          this.toggleHighlightMode(response.enabled);
+        }
+      }
+    });
   }
 
   /**
@@ -173,7 +293,8 @@ class HighlightManager {
    */
   getNormalizedUrl() {
     const url = new URL(window.location.href);
-    return `${url.origin}${url.pathname}`;
+    // Remove any trailing slash to ensure consistent URL storage format
+    return `${url.origin}${url.pathname.replace(/\/$/, '')}`;
   }
 
   /**
@@ -238,23 +359,77 @@ class HighlightManager {
 
   /**
    * Toggle highlighting mode on/off
+   * @param {boolean} [forceState] - Optional forced state
    */
-  toggleHighlightMode() {
-    this.isEnabled = !this.isEnabled;
-    console.log('[HighlightAnywhere] Highlight mode toggled:', this.isEnabled);
-    
-    // Update cursor to indicate highlight mode
-    if (this.isEnabled) {
-      document.body.classList.add('highlight-mode');
+  toggleHighlightMode(forceState) {
+    // If forceState parameter is provided, use it, otherwise toggle current state
+    const previousState = this.isEnabled;
+    if (typeof forceState === 'boolean') {
+      // Only update if the state actually changes
+      if (this.isEnabled === forceState) {
+        // State is already what was requested, no change needed
+        console.log('[HighlightAnywhere] Already in requested state:', forceState);
+        return this.isEnabled;
+      }
+      this.isEnabled = forceState;
     } else {
-      document.body.classList.remove('highlight-mode');
+      this.isEnabled = !this.isEnabled;
     }
     
-    // Send status update to popup if needed
-    chrome.runtime.sendMessage({ 
-      action: 'highlightModeChanged', 
-      isEnabled: this.isEnabled 
-    });
+    console.log('[HighlightAnywhere] Highlight mode changed:', this.isEnabled);
+    
+    // Apply styles unconditionally - ensure DOM state matches memory state
+    if (this.isEnabled) {
+      document.body.classList.add('highlight-mode');
+      console.log('[HighlightAnywhere] Added highlight-mode class to body');
+      
+      // When enabled, load highlights
+      if (!this.highlightsLoaded || previousState !== this.isEnabled) {
+        console.log('[HighlightAnywhere] Loading highlights after enabling highlight mode');
+        this.loadHighlights();
+      }
+    } else {
+      document.body.classList.remove('highlight-mode');
+      console.log('[HighlightAnywhere] Removed highlight-mode class from body');
+      
+      // When disabled, remove all visible highlights from the page
+      if (previousState !== this.isEnabled) {
+        console.log('[HighlightAnywhere] Removing highlights after disabling highlight mode');
+        document.querySelectorAll('.highlight-anywhere-highlight').forEach(el => {
+          // Replace highlighted element with text node of same text
+          const textNode = document.createTextNode(el.textContent);
+          el.parentNode.replaceChild(textNode, el);
+        });
+      }
+    }
+    
+    // Force redraw to apply cursor style changes (using different methods to ensure style refresh)
+    const originalCursor = document.body.style.cursor;
+    document.body.style.cursor = this.isEnabled ? 'inherit' : 'default';
+    setTimeout(() => {
+      document.body.style.cursor = originalCursor;
+      
+      // Double check to ensure styles are correctly applied
+      if (this.isEnabled !== document.body.classList.contains('highlight-mode')) {
+        console.log('[HighlightAnywhere] Style mismatch detected, forcing update');
+        if (this.isEnabled) {
+          document.body.classList.add('highlight-mode');
+        } else {
+          document.body.classList.remove('highlight-mode');
+        }
+      }
+    }, 50);
+    
+    // Only send state change message if state actually changed
+    if (previousState !== this.isEnabled) {
+      // Send new state back to background to ensure global state sync
+      chrome.runtime.sendMessage({ 
+        action: 'highlightModeChanged', 
+        isEnabled: this.isEnabled 
+      });
+    }
+    
+    return this.isEnabled;
   }
 
   /**
@@ -274,7 +449,7 @@ class HighlightManager {
       const storeHighlights = settings.storeHighlights !== undefined ? settings.storeHighlights : true;
       
       try {
-        // 保存原始选择信息，用于后续恢复
+        // Save original selection information for later restoration
         const originalTextContent = range.toString();
         
         // Create highlight span
@@ -286,10 +461,10 @@ class HighlightManager {
         // Apply the highlight
         range.surroundContents(highlightSpan);
         
-        // 获取更准确的文本路径
+        // Get more accurate text path
         const betterPath = this.getNodePath(highlightSpan);
         
-        // 获取容器信息，确保我们正确捕获文本节点
+        // Get container information to ensure we correctly capture text nodes
         const startContainerPath = this.getNodePath(range.startContainer);
         const endContainerPath = this.getNodePath(range.endContainer);
         
@@ -297,8 +472,8 @@ class HighlightManager {
         const highlightData = {
           id: highlightId,
           url: this.getNormalizedUrl(),
-          text: originalTextContent,  // 存储确切的选中文本
-          fullText: this.getContextText(range.startContainer), // 存储周围上下文，帮助文本匹配
+          text: originalTextContent,  // Store exact selected text
+          fullText: this.getContextText(range.startContainer), // Store surrounding context to help text matching
           path: betterPath,
           startContainer: startContainerPath,
           endContainer: endContainerPath,
@@ -310,12 +485,15 @@ class HighlightManager {
         
         console.log('[HighlightAnywhere] Created highlight:', highlightData);
         
-        // Add to array
+        // Add to array (always add to memory regardless of storage setting)
         this.highlightedRanges.push(highlightData);
         
         // Save if storage is enabled
         if (storeHighlights) {
+          console.log('[HighlightAnywhere] "Store Highlights" is enabled, saving highlight to storage');
           this.saveHighlights();
+        } else {
+          console.log('[HighlightAnywhere] "Store Highlights" is disabled, highlight only exists in this session');
         }
         
         // Reset selection
@@ -327,16 +505,16 @@ class HighlightManager {
   }
   
   /**
-   * 获取一个文本节点的上下文内容（包括其父元素的文本）
-   * 这有助于在节点变化时定位相似内容
+   * Get a text node's surrounding context content (including its parent's text)
+   * This helps to locate similar content when node changes
    */
   getContextText(node) {
-    // 如果是文本节点，获取其父元素的全部文本
+    // If it's a text node, get its parent's entire text
     if (node && node.nodeType === Node.TEXT_NODE && node.parentNode) {
       return node.parentNode.textContent;
     }
     
-    // 如果是元素节点，直接获取其文本
+    // If it's an element node, get its text directly
     if (node && node.nodeType === Node.ELEMENT_NODE) {
       return node.textContent;
     }
@@ -367,7 +545,7 @@ class HighlightManager {
       const index = Array.from(currentNode.parentNode.childNodes)
         .indexOf(currentNode);
       
-      // 收集更多节点信息，以便更好地识别
+      // Collect more node information to better identify
       let nodeInfo = {
         index,
         indexInType,
@@ -378,9 +556,9 @@ class HighlightManager {
         id: currentNode.id || null
       };
       
-      // 对于文本节点，保存一个文本片段以便匹配
+      // For text nodes, save a text fragment for matching
       if (currentNode.nodeType === Node.TEXT_NODE && currentNode.textContent) {
-        nodeInfo.textFragment = currentNode.textContent.substring(0, 50); // 保存前50个字符
+        nodeInfo.textFragment = currentNode.textContent.substring(0, 50); // Save first 50 characters
       }
       
       path.unshift(nodeInfo);
@@ -400,15 +578,15 @@ class HighlightManager {
     
     for (const step of path) {
       try {
-        // 尝试多种方法定位节点
+        // Try multiple methods to locate node
         
-        // 1. 首先尝试id (如果有)
+        // 1. First try id (if any)
         if (step.id && document.getElementById(step.id)) {
           currentNode = document.getElementById(step.id);
           continue;
         }
         
-        // 2. 尝试通过类型索引
+        // 2. Try through type index
         if (step.nodeName && step.indexInType !== undefined) {
           const siblings = Array.from(currentNode.childNodes)
             .filter(n => n.nodeType === step.nodeType && n.nodeName === step.nodeName);
@@ -419,7 +597,7 @@ class HighlightManager {
           }
         }
         
-        // 3. 如果有文本片段匹配，尝试找到匹配的文本节点
+        // 3. If there's text fragment match, try to find matching text node
         if (step.nodeType === Node.TEXT_NODE && step.textFragment) {
           const textNodes = Array.from(currentNode.childNodes)
             .filter(n => n.nodeType === Node.TEXT_NODE);
@@ -434,7 +612,7 @@ class HighlightManager {
           continue;
         }
         
-        // 4. 退回到常规索引
+        // 4. Fall back to regular index
         const children = Array.from(currentNode.childNodes);
         if (step.index < children.length) {
           currentNode = children[step.index];
@@ -455,50 +633,53 @@ class HighlightManager {
    * Save highlights to Chrome storage
    */
   saveHighlights() {
-    const normalizedUrl = this.getNormalizedUrl();
-    const key = `highlight-data-${normalizedUrl}`;
+    const highlights = this.highlightedRanges;
+    console.log(`[HighlightAnywhere] Saving ${highlights.length} highlights`);
+    console.log(`[HighlightAnywhere] URL for storage: ${this.normalizedUrl}`);
     
-    console.log(`[HighlightAnywhere] Saving ${this.highlightedRanges.length} highlights with key: ${key}`);
-    chrome.storage.local.set({ [key]: this.highlightedRanges }, () => {
-      if (chrome.runtime.lastError) {
-        console.error('[HighlightAnywhere] Error saving highlights:', chrome.runtime.lastError);
-      } else {
+    this.storage.saveHighlights(this.normalizedUrl, highlights)
+      .then(() => {
         console.log('[HighlightAnywhere] Highlights saved successfully');
-      }
-    });
+      })
+      .catch(err => {
+        console.error('[HighlightAnywhere] Error saving highlights:', err);
+      });
   }
 
   /**
    * Load and apply highlights from storage
    * @param {boolean} force - Force reload even if already loaded
+   * @param {Object} directData - Optional direct data to use instead of loading from storage
    */
-  loadHighlights(force = false) {
-    // 避免重复加载
+  loadHighlights(force = false, directData = null) {
+    // Avoid repeated loading
     if (this.highlightsLoaded && !force) {
       console.log('[HighlightAnywhere] Highlights already loaded, skipping');
       return;
     }
     
-    const key = this.storageKey;
-    console.log('[HighlightAnywhere] Loading highlights with key:', key);
+    console.log('[HighlightAnywhere] Loading highlights');
     
-    chrome.storage.local.get(['settings', key], (result) => {
-      // Check if storage is enabled in settings
-      const settings = result.settings || {};
-      const storeHighlights = settings.storeHighlights !== undefined ? settings.storeHighlights : true;
+    // First check if highlight mode is enabled - don't load if it's disabled
+    if (!this.isEnabled) {
+      console.log('[HighlightAnywhere] Highlight mode is disabled, not loading highlights');
+      return;
+    }
+    
+    // Debug information
+    const originalUrl = window.location.href;
+    const normalizedUrl = this.normalizedUrl;
+    console.log('[HighlightAnywhere] Loading highlights for URL:', originalUrl);
+    console.log('[HighlightAnywhere] Normalized URL for storage lookup:', normalizedUrl);
+    
+    // Function to process highlights once we have them (either from storage or direct data)
+    const processHighlights = (savedHighlights) => {
+      console.log(`[HighlightAnywhere] Processing ${savedHighlights.length} highlights for URL: ${normalizedUrl}`);
       
-      if (!storeHighlights) {
-        console.log('[HighlightAnywhere] Highlight storage is disabled, not loading highlights');
-        return; // Don't load if storage is disabled
-      }
-      
-      const savedHighlights = result[key] || [];
-      console.log(`[HighlightAnywhere] Found ${savedHighlights.length} saved highlights`);
-      
-      // 先清除当前高亮，避免重复
+      // First clear current highlights to avoid repetition
       if (force) {
         document.querySelectorAll('.highlight-anywhere-highlight').forEach(el => {
-          // 使用具有相同文本的文本节点替换高亮元素
+          // Replace highlighted element with text node of same text
           const textNode = document.createTextNode(el.textContent);
           el.parentNode.replaceChild(textNode, el);
         });
@@ -510,18 +691,18 @@ class HighlightManager {
       // Apply each saved highlight
       savedHighlights.forEach(highlight => {
         try {
-          // 尝试查找节点 - 首先使用存储的路径
+          // Try to find node - First use stored path
           let node = this.getNodeFromPath(highlight.path);
           let usedMethod = "primary-path";
           
-          // 如果找不到节点，尝试使用startContainer路径
+          // If node not found, try using startContainer path
           if (!node && highlight.startContainer) {
             console.log('[HighlightAnywhere] Using startContainer path as fallback');
             node = this.getNodeFromPath(highlight.startContainer);
             usedMethod = "start-container";
           }
           
-          // 如果还是找不到节点，尝试使用文本搜索
+          // If still no node found, try text search
           if (!node && highlight.text) {
             console.log('[HighlightAnywhere] Trying text search as last resort');
             const textNodes = this.findTextNodesWithContent(document.body, highlight.text);
@@ -532,7 +713,7 @@ class HighlightManager {
             }
           }
           
-          // 如果上述方法都失败，尝试使用上下文匹配
+          // If above methods fail, try using context match
           if (!node && highlight.fullText) {
             console.log('[HighlightAnywhere] Trying context match');
             const contextNodes = this.findNodesWithSimilarContext(highlight.fullText, highlight.text);
@@ -547,44 +728,44 @@ class HighlightManager {
             return;
           }
           
-          // 创建范围并高亮
+          // Create range and highlight
           const range = document.createRange();
           
-          // 设置范围 - 这里根据查找方法进行不同处理
+          // Set range - Different handling based on search method
           if (node.nodeType === Node.TEXT_NODE) {
-            // 文本节点处理
+            // Text node handling
             
-            // 如果使用的是文本搜索或上下文匹配，我们需要找到原始文本在当前文本中的位置
+            // If using text search or context match, we need to find original text position in current text
             if (usedMethod === "text-search" || usedMethod === "context-match") {
               const nodeText = node.textContent;
               const highlightText = highlight.text;
               
-              // 尝试找到原始文本在当前文本节点中的开始位置
+              // Try to find original text position in current text node
               const startPos = nodeText.indexOf(highlightText);
               if (startPos >= 0) {
-                // 我们找到了匹配位置，使用它代替原始偏移量
+                // We found matching position, use it instead of original offset
                 range.setStart(node, startPos);
                 range.setEnd(node, startPos + highlightText.length);
                 console.log(`[HighlightAnywhere] Set range based on text match: ${startPos}-${startPos + highlightText.length}`);
               } else {
-                // 如果找不到精确匹配，使用默认值
+                // If exact match not found, use default value
                 range.setStart(node, highlight.startOffset || 0);
                 range.setEnd(node, highlight.endOffset || node.textContent.length);
               }
             } else {
-              // 使用存储的偏移量
+              // Use stored offset
               range.setStart(node, highlight.startOffset || 0);
               range.setEnd(node, highlight.endOffset || node.textContent.length);
             }
           } else if (node.nodeType === Node.ELEMENT_NODE) {
-            // 对于元素节点，我们需要更复杂的处理...
+            // For element nodes, we need more complex handling...
             const originalText = highlight.text;
             
-            // 查找该元素中所有文本节点
+            // Find all text nodes in this element
             const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
             let foundTextNode = null;
             
-            // 遍历查找包含我们要高亮文本的节点
+            // Traverse to find nodes containing text we want to highlight
             while (walker.nextNode()) {
               const textNode = walker.currentNode;
               if (textNode.textContent.includes(originalText)) {
@@ -594,13 +775,13 @@ class HighlightManager {
             }
             
             if (foundTextNode) {
-              // 找到了包含原始文本的节点，设置精确范围
+              // Found node containing original text, set exact range
               const startPos = foundTextNode.textContent.indexOf(originalText);
               range.setStart(foundTextNode, startPos);
               range.setEnd(foundTextNode, startPos + originalText.length);
               console.log('[HighlightAnywhere] Found exact text within element node');
             } else {
-              // 实在找不到，高亮整个元素
+              // If still not found, highlight entire element
               if (node.firstChild) {
                 range.setStartBefore(node.firstChild);
                 range.setEndAfter(node.lastChild);
@@ -625,7 +806,7 @@ class HighlightManager {
             appliedCount++;
           } catch (e) {
             console.error('[HighlightAnywhere] Failed to surround contents:', e);
-            // 尝试备用方法 - 创建新span并插入
+            // Try backup method - Create new span and insert
             try {
               const fragment = range.extractContents();
               highlightSpan.appendChild(fragment);
@@ -642,14 +823,33 @@ class HighlightManager {
       
       console.log(`[HighlightAnywhere] Successfully applied ${appliedCount} out of ${savedHighlights.length} highlights`);
       this.highlightsLoaded = true;
-    });
+    };
+    
+    // If direct data is provided, use it instead of loading from storage
+    if (directData) {
+      console.log('[HighlightAnywhere] Using direct data instead of loading from storage');
+      const highlightsForThisUrl = directData[normalizedUrl] || [];
+      processHighlights(highlightsForThisUrl);
+    } else {
+      // Load highlights from storage regardless of storeHighlights setting
+      // storeHighlights only controls saving new highlights, not loading existing ones
+      this.storage.loadHighlights(this.normalizedUrl)
+        .then(savedHighlights => {
+          console.log(`[HighlightAnywhere] Found ${savedHighlights.length} saved highlights for URL: ${normalizedUrl}`);
+          processHighlights(savedHighlights);
+        })
+        .catch(err => {
+          console.error('[HighlightAnywhere] Error loading highlights:', err);
+          console.error('[HighlightAnywhere] URL used for storage lookup:', normalizedUrl);
+        });
+    }
   }
   
   /**
-   * 查找包含特定文本内容的文本节点
-   * @param {Node} rootNode - 搜索起点节点
-   * @param {string} searchText - 要查找的文本内容
-   * @returns {Array} - 匹配的文本节点数组
+   * Find text nodes containing specific text content
+   * @param {Node} rootNode - Search starting node
+   * @param {string} searchText - Text content to search for
+   * @returns {Array} - Array of matching text nodes
    */
   findTextNodesWithContent(rootNode, searchText) {
     const textNodes = [];
@@ -673,37 +873,37 @@ class HighlightManager {
   }
   
   /**
-   * 查找与给定上下文和目标文本相似的节点
-   * @param {string} context - 完整上下文文本
-   * @param {string} targetText - 目标高亮文本
-   * @returns {Array} - 匹配的节点数组
+   * Find nodes with similar context and target text
+   * @param {string} context - Full context text
+   * @param {string} targetText - Target highlight text
+   * @returns {Array} - Array of matching nodes
    */
   findNodesWithSimilarContext(context, targetText) {
-    // 清理文本，移除额外空白并简化匹配
+    // Clean text, remove extra whitespace and simplify matching
     const cleanContext = context.replace(/\s+/g, ' ').trim();
     const cleanTargetText = targetText.replace(/\s+/g, ' ').trim();
     
-    // 结果数组
+    // Result array
     const matchingNodes = [];
     
-    // 查找包含类似上下文的元素
+    // Find elements containing similar context
     const allElements = document.querySelectorAll('p, div, span, li, td, th, h1, h2, h3, h4, h5, h6');
     
     allElements.forEach(element => {
       const elementText = element.textContent.replace(/\s+/g, ' ').trim();
       
-      // 检查元素是否包含目标文本
+      // Check if element contains target text
       if (elementText.includes(cleanTargetText)) {
-        // 如果有较好的上下文匹配，或只是查找目标文本
+        // If there's better context match or just searching for target text
         if (elementText.length < cleanContext.length * 1.5 && elementText.length > cleanTargetText.length * 1.5) {
-          // 找到元素内包含目标文本的文本节点
+          // Found text node within element containing target text
           const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
           
           while (walker.nextNode()) {
             const node = walker.currentNode;
             if (node.textContent.includes(cleanTargetText)) {
               matchingNodes.push(node);
-              break; // 找到一个匹配节点就可以了
+              break; // Found one matching node is enough
             }
           }
         }
@@ -715,6 +915,25 @@ class HighlightManager {
     }
     
     return matchingNodes;
+  }
+
+  // Initialize and connect to background script
+  initHighlighter() {
+    this.registerMessageListener();
+    
+    // Initial sync with background
+    this.syncStateWithBackground();
+    
+    // Listen for visibility changes to resync when tab becomes active
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        console.log('Tab became visible, syncing state with background');
+        this.syncStateWithBackground();
+      }
+    });
+    
+    // No more periodic sync to reduce message traffic
+    console.log('Highlight functionality initialized');
   }
 }
 

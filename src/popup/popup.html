@@ -37,16 +37,8 @@
             <span class="slider"></span>
           </label>
         </div>
-      </div>
-      
-      <div class="setting-item" id="storageLocationContainer">
-        <label for="storageLocation">Storage Location:</label>
-        <div class="input-with-button">
-          <input type="text" id="storageLocation" placeholder="Set your storage location">
-          <button id="browseButton" title="Browse">...</button>
-        </div>
         <div class="setting-help">
-          Path will be created automatically when highlights are saved
+          Automatically save to browser local storage
         </div>
       </div>
       
@@ -54,13 +46,36 @@
         <label for="highlightColor">Highlight Color:</label>
         <input type="color" id="highlightColor" value="#FFEE00">
       </div>
+      
+      <div class="divider"></div>
+      
+      <h2>Data Management</h2>
+      <div class="setting-item data-actions">
+        <div class="button-group">
+          <button id="exportData" class="action-button">Export Data</button>
+          <button id="importData" class="action-button">Import Data</button>
+          <input type="file" id="importFile" accept=".json" style="display: none;">
+        </div>
+        <div class="setting-help">
+          Export/Import highlight data for backup and cross-device usage
+        </div>
+      </div>
     </div>
     
     <div class="footer">
-      <button id="saveSettings">Save Settings</button>
+      <!-- Save button removed - settings are saved automatically when changed -->
+    </div>
+    
+    <!-- Notification popup -->
+    <div id="notification" class="notification">
+      <span id="notificationMessage"></span>
+      <button id="closeNotification">×</button>
     </div>
   </div>
   
+  <!-- Load storage utility first -->
+  <script src="../utils/storage.js"></script>
+  <!-- Then load popup script -->
   <script src="popup.js"></script>
 </body>
 </html> 

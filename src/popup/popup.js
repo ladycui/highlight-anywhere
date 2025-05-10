@@ -10,25 +10,33 @@ document.addEventListener('DOMContentLoaded', function() {
   const highlightToggle = document.getElementById('highlightToggle');
   const storeHighlightsToggle = document.getElementById('storeHighlightsToggle');
   const highlightColor = document.getElementById('highlightColor');
-  const storageLocation = document.getElementById('storageLocation');
-  const storageLocationContainer = document.getElementById('storageLocationContainer');
-  const browseButton = document.getElementById('browseButton');
-  const saveSettingsButton = document.getElementById('saveSettings');
+  const exportData = document.getElementById('exportData');
+  const importData = document.getElementById('importData');
+  const importFile = document.getElementById('importFile');
+  const notification = document.getElementById('notification');
+  const notificationMessage = document.getElementById('notificationMessage');
+  const closeNotification = document.getElementById('closeNotification');
 
+  // Create storage instance
+  const storage = new HighlightStorage();
+  
   // Get current state and settings
   loadCurrentState();
   loadSettings();
 
   // Event listeners
   highlightToggle.addEventListener('change', toggleHighlightMode);
-  storeHighlightsToggle.addEventListener('change', toggleStorageVisibility);
-  saveSettingsButton.addEventListener('click', saveSettings);
-  highlightColor.addEventListener('change', updateColorPreview);
-  browseButton.addEventListener('click', () => {
-    // In a real implementation, this would open a file dialog
-    // Chrome extensions can't directly access the file system without user interaction
-    alert('In a production extension, this would open a directory selection dialog. For now, please enter the path manually.');
+  // Add auto-save functionality to other settings
+  storeHighlightsToggle.addEventListener('change', autoSaveSettings);
+  highlightColor.addEventListener('change', () => {
+    updateColorPreview();
+    autoSaveSettings();
   });
+  
+  exportData.addEventListener('click', exportHighlightData);
+  importData.addEventListener('click', triggerImportFile);
+  importFile.addEventListener('change', handleImportFile);
+  closeNotification.addEventListener('click', hideNotification);
 
   // Add debug button (only visible when Ctrl+Shift+D is pressed in popup)
   addDebugPanel();
@@ -70,22 +78,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Load current extension state
   function loadCurrentState() {
-    chrome.runtime.sendMessage({ action: 'getState' }, function(response) {
-      console.log('[HighlightAnywhere] Got current state:', response);
-      if (response && response.enabled !== undefined) {
-        highlightToggle.checked = response.enabled;
+    console.log('[HighlightAnywhere] Loading current state...');
+    
+    // 从本地存储加载最新状态
+    chrome.storage.local.get(['settings'], function(result) {
+      if (result.settings && result.settings.enabled !== undefined) {
+        const storageState = result.settings.enabled;
+        console.log('[HighlightAnywhere] State from storage:', storageState);
+        highlightToggle.checked = storageState;
       }
+      
+      // 再从后台脚本获取当前状态，以确保同步
+      chrome.runtime.sendMessage({ action: 'getState' }, function(response) {
+        if (response && response.enabled !== undefined) {
+          const bgState = response.enabled; 
+          console.log('[HighlightAnywhere] State from background:', bgState);
+          
+          // 如果背景状态与存储状态不同，以背景状态为准
+          if (highlightToggle.checked !== bgState) {
+            console.log('[HighlightAnywhere] State mismatch, updating to:', bgState);
+            highlightToggle.checked = bgState;
+            
+            // 更新本地存储以匹配背景状态
+            chrome.storage.local.get(['settings'], function(result) {
+              const settings = result.settings || {};
+              settings.enabled = bgState;
+              chrome.storage.local.set({ settings });
+            });
+          }
+        }
+      });
     });
-  }
-
-  // Toggle storage location visibility based on storage toggle
-  function toggleStorageVisibility() {
-    console.log('[HighlightAnywhere] Storage toggle changed:', storeHighlightsToggle.checked);
-    if (storeHighlightsToggle.checked) {
-      storageLocationContainer.style.display = 'block';
-    } else {
-      storageLocationContainer.style.display = 'none';
-    }
   }
 
   // Load saved settings
@@ -106,13 +129,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Set storage settings
         if (settings.storeHighlights !== undefined) {
           storeHighlightsToggle.checked = settings.storeHighlights;
-          // Update UI visibility
-          toggleStorageVisibility();
-        }
-        
-        // Set storage location
-        if (settings.storageLocation) {
-          storageLocation.value = settings.storageLocation;
         }
         
         // Ensure toggle status is in sync with settings
@@ -125,70 +141,61 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Toggle highlight mode
   function toggleHighlightMode() {
-    const isEnabled = highlightToggle.checked;
-    console.log('[HighlightAnywhere] Toggle highlight mode manually:', isEnabled);
+    const currentState = highlightToggle.checked;
+    console.log('[HighlightAnywhere] Toggle highlight mode manually:', currentState);
     
+    // 立即更新UI状态，避免延迟
+    const newState = currentState;
+    
+    // 1. 立即保存到本地存储，确保状态持久化
+    chrome.storage.local.get(['settings'], function(result) {
+      const settings = result.settings || {};
+      settings.enabled = newState;
+      chrome.storage.local.set({ settings }, function() {
+        console.log('[HighlightAnywhere] Highlight state saved to storage:', newState);
+      });
+    });
+    
+    // 2. 通知背景脚本更新全局状态
+    chrome.runtime.sendMessage({ 
+      action: 'highlightModeChanged', 
+      isEnabled: newState 
+    }, function(response) {
+      console.log('[HighlightAnywhere] Background notified of state change:', response);
+    });
+    
+    // 3. 更新当前标签页状态
     chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
       if (tabs[0]) {
-        chrome.runtime.sendMessage({ 
+        chrome.tabs.sendMessage(tabs[0].id, { 
           action: 'toggleHighlight',
-          tabId: tabs[0].id
+          enabled: newState
         }, function(response) {
-          // Update UI based on response
-          console.log('[HighlightAnywhere] Toggle response:', response);
-          if (response && response.enabled !== undefined) {
-            // Make sure the checkbox reflects the actual state
-            highlightToggle.checked = response.enabled;
-            
-            // Also update the settings in storage
-            chrome.storage.local.get(['settings'], function(result) {
-              const settings = result.settings || {};
-              settings.enabled = response.enabled;
-              chrome.storage.local.set({ settings });
-            });
-          }
+          console.log('[HighlightAnywhere] Tab updated with new state:', response);
         });
       }
     });
   }
 
-  // Save settings
-  function saveSettings() {
+  // Auto save settings when any setting is changed
+  function autoSaveSettings() {
     const newSettings = {
       highlightColor: hexToRgba(highlightColor.value, 0.5),
-      storageLocation: storageLocation.value,
       storeHighlights: storeHighlightsToggle.checked,
-      // Also save the toggle state
       enabled: highlightToggle.checked
     };
     
-    console.log('[HighlightAnywhere] Saving settings:', newSettings);
-    
-    // 如果用户设置了存储位置，标记为已配置
-    if (storeHighlightsToggle.checked && storageLocation.value.trim() !== '') {
-      newSettings.storageConfigured = true;
-      // 通知后台存储已配置
-      chrome.runtime.sendMessage({ action: 'configureStorage' });
-    }
+    console.log('[HighlightAnywhere] Auto-saving settings:', newSettings);
     
     chrome.storage.local.get(['settings'], function(result) {
       const currentSettings = result.settings || {};
       const updatedSettings = { ...currentSettings, ...newSettings };
       
       chrome.storage.local.set({ settings: updatedSettings }, function() {
-        console.log('[HighlightAnywhere] Settings saved successfully');
+        console.log('[HighlightAnywhere] Settings saved automatically');
         
         // Show success message
-        const saveBtn = document.getElementById('saveSettings');
-        const originalText = saveBtn.textContent;
-        
-        saveBtn.textContent = 'Saved!';
-        saveBtn.disabled = true;
-        
-        setTimeout(() => {
-          saveBtn.textContent = originalText;
-          saveBtn.disabled = false;
-        }, 1500);
+        showNotification('Settings updated', 'success');
         
         // Apply settings to active tabs
         applySettingsToActiveTabs(updatedSettings);
@@ -213,6 +220,111 @@ document.addEventListener('DOMContentLoaded', function() {
   function updateColorPreview() {
     // Could be used to show a live preview of the highlight color
     console.log('[HighlightAnywhere] Color updated to:', highlightColor.value);
+  }
+  
+  // 导出高亮数据
+  async function exportHighlightData() {
+    try {
+      exportData.disabled = true;
+      exportData.textContent = '导出中...';
+      
+      const result = await storage.exportAllHighlights();
+      
+      if (result) {
+        showNotification('高亮数据导出成功', 'success');
+      } else {
+        showNotification('没有高亮数据可导出', 'warning');
+      }
+    } catch (err) {
+      console.error('[HighlightAnywhere] Export failed:', err);
+      showNotification('导出失败: ' + err.message, 'error');
+    } finally {
+      exportData.disabled = false;
+      exportData.textContent = '导出高亮数据';
+    }
+  }
+  
+  // 触发导入文件选择
+  function triggerImportFile() {
+    importFile.click();
+  }
+  
+  // 处理导入文件
+  async function handleImportFile(event) {
+    try {
+      if (!event.target.files || event.target.files.length === 0) {
+        return;
+      }
+      
+      importData.disabled = true;
+      importData.textContent = '导入中...';
+      
+      const file = event.target.files[0];
+      const fileData = await storage.readImportFile(file);
+      const result = await storage.importHighlights(fileData);
+      
+      // Get current settings to check storage mode
+      chrome.storage.local.get(['settings'], (settingsResult) => {
+        const settings = settingsResult.settings || {};
+        const storeHighlights = settings.storeHighlights !== undefined ? settings.storeHighlights : true;
+        
+        // Build notification message
+        let notificationMessage;
+        if (result.errors && result.errors.length > 0) {
+          notificationMessage = `导入完成，但有${result.errors.length}个错误`;
+          showNotification(notificationMessage, 'warning');
+        } else {
+          if (result.storedToMemoryOnly) {
+            notificationMessage = `导入成功: ${result.urlsImported} 个URL，${result.highlightsImported} 个高亮 (仅内存)`;
+          } else {
+            notificationMessage = `导入成功: ${result.urlsImported} 个URL，${result.highlightsImported} 个高亮`;
+          }
+          showNotification(notificationMessage, 'success');
+        }
+        
+        // Reload current page highlights - if storage is disabled, pass data directly
+        chrome.tabs.query({ active: true, currentWindow: true }, function(tabs) {
+          if (tabs[0]) {
+            if (!storeHighlights) {
+              // When storage is disabled, find the specific data for current URL and pass it directly
+              chrome.tabs.sendMessage(tabs[0].id, { 
+                action: 'loadHighlights', 
+                force: true,
+                directData: fileData.data  // Send all imported data directly to content script
+              });
+              console.log('[HighlightAnywhere] Sending direct import data to content script');
+            } else {
+              // When storage is enabled, just trigger normal reload
+              chrome.tabs.sendMessage(tabs[0].id, { 
+                action: 'loadHighlights', 
+                force: true 
+              });
+            }
+          }
+        });
+      });
+    } catch (err) {
+      console.error('[HighlightAnywhere] Import failed:', err);
+      showNotification('导入失败: ' + err.message, 'error');
+    } finally {
+      importData.disabled = false;
+      importData.textContent = '导入高亮数据';
+      event.target.value = ''; // 清空文件输入，允许重复选择相同文件
+    }
+  }
+  
+  // 显示通知
+  function showNotification(message, type = 'success') {
+    notificationMessage.textContent = message;
+    notification.className = 'notification show ' + type;
+    
+    // 自动隐藏
+    setTimeout(hideNotification, 3000);
+  }
+  
+  // 隐藏通知
+  function hideNotification() {
+    notification.className = 'notification';
   }
 
   // Helper: Convert RGBA to HEX

@@ -2,6 +2,17 @@
 
 A Chrome extension that allows users to highlight text on any webpage and save those highlights for future visits.
 
+Ever read long docs or articles and wished you could just *highlight* stuff like on paper?
+ But most tools are either cloud-based or overcomplicated. 😩
+
+I built **Highlight Anywhere** 🖍️
+ ✅ Highlight text on any webpage
+ ✅ No login, no sync—your data stays local
+ ✅ Lightweight & private
+
+Try it 👉 https://github.com/ladycui/highlight-anywhere
+ Your feedback = future features! 💡
+
 ## Features
 
 - Toggle highlighting mode on/off with keyboard shortcut (Shift+Ctrl+H)
@@ -27,7 +38,7 @@ The extension is built using Manifest V3 and has a modular architecture designed
 
 ### Future Extensions
 * only text is supported, intead of all kinds of types
-The architecture is designed to be extensible to support highlighting other elements beyond text, such as:
+  The architecture is designed to be extensible to support highlighting other elements beyond text, such as:
 
    - Images
    - Videos
@@ -35,7 +46,11 @@ The architecture is designed to be extensible to support highlighting other elem
    - Tables
    - And more...
 * local storage needs to be refreshed regullaly.
-* cancel a highlight
+* erase a highlight
+* add a notebook where your highlight notes list
+* add some configs, e.g. storeage periods - days
+* support highlight text with link
+* multi color in a same page
 
 
 ## Installation

@@ -10,6 +10,12 @@
   --toggle-off-color: #d1d1d6;
   --shadow-color: rgba(0, 0, 0, 0.1);
   --help-text-color: #8e8e93;
+  --action-button-color: #f0f0f0;
+  --action-button-hover: #e3e3e3;
+  --export-color: #4cd964;
+  --import-color: #5ac8fa;
+  --warning-color: #ff9500;
+  --error-color: #ff3b30;
 }
 
 * {
@@ -227,6 +233,39 @@ button:disabled {
   width: 100%;
 }
 
+/* 导入导出数据按钮 */
+.data-actions {
+  margin-top: 10px;
+}
+
+.button-group {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.action-button {
+  flex: 1;
+  font-size: 12px;
+  padding: 8px 4px;
+}
+
+#exportData {
+  background-color: var(--export-color);
+}
+
+#exportData:hover {
+  background-color: #3cbd53;
+}
+
+#importData {
+  background-color: var(--import-color);
+}
+
+#importData:hover {
+  background-color: #4ab3e4;
+}
+
 /* Notification */
 .notification {
   position: fixed;
@@ -242,8 +281,32 @@ button:disabled {
   transition: transform 0.3s ease;
   z-index: 1000;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .notification.show {
   transform: translateY(0);
+}
+
+.notification.success {
+  background-color: rgba(52, 199, 89, 0.9);
+}
+
+.notification.error {
+  background-color: rgba(255, 59, 48, 0.9);
+}
+
+.notification.warning {
+  background-color: rgba(255, 149, 0, 0.9);
+}
+
+#closeNotification {
+  background: transparent;
+  color: white;
+  border: none;
+  font-size: 16px;
+  padding: 0 4px;
+  cursor: pointer;
 } 
